@@ -31,16 +31,55 @@ def print_instructions():
     print("Enter row and column numbers to make your guesses.")
     print("Good luck!\n")
 
-def main():
+def select_difficulty():
     while True:
-        board_size = 7
-        num_ships = 3
-        max_turns = 10
+        difficulty = input("Select difficulty (easy, medium, hard): ").lower()
+        if difficulty in ['easy', 'medium', 'hard']:
+            return difficulty
+        else:
+            print("Invalid difficulty. Please enter 'easy', 'medium', or 'hard'.")
 
+def set_parameters(difficulty):
+    if difficulty == 'easy':
+        return 5, 2, 15  # board_size, num_ships, max_turns
+    elif difficulty == 'medium':
+        return 7, 3, 10
+    else:
+        return 10, 4, 8
+
+def calculate_score(turn, max_turns):
+    return max(0, max_turns - turn)
+
+def update_leaderboard(leaderboard, player_name, score):
+    leaderboard.append((player_name, score))
+    leaderboard.sort(key=lambda x: x[1], reverse=True)
+
+def print_leaderboard(leaderboard):
+    print("\nLeaderboard:")
+    for idx, (name, score) in enumerate(leaderboard):
+        print(f"{idx + 1}. {name}: {score} points")
+
+def give_hint(ships, guess_row, guess_col):
+    closest_distance = min(get_distance(guess_row, guess_col, ship_row, ship_col) for ship_row, ship_col in ships)
+    if closest_distance == 0:
+        print("You hit a ship!")
+    else:
+        print(f"Hint: The closest ship is {closest_distance} units away.")
+
+def main():
+    leaderboard = []
+
+    while True:
+        print_instructions()
+        
+        difficulty = select_difficulty()
+        board_size, num_ships, max_turns = set_parameters(difficulty)
+        
         # Initialize the game board
         board = [["O"] * board_size for _ in range(board_size)]
 
-        print_instructions()
+        player_name = input("Enter your name: ")
+
         print_board(board)
 
         # Place the battleships randomly on the board
@@ -52,13 +91,13 @@ def main():
 
             # Get player's guess
             while True:
-                guess_row = input("Guess Row (0-6): ")
-                guess_col = input("Guess Col (0-6): ")
+                guess_row = input(f"Guess Row (0-{board_size - 1}): ")
+                guess_col = input(f"Guess Col (0-{board_size - 1}): ")
                 if is_valid_input(guess_row, board_size) and is_valid_input(guess_col, board_size):
                     guess_row, guess_col = int(guess_row), int(guess_col)
                     break
                 else:
-                    print("Invalid input. Please enter numbers between 0 and 6.")
+                    print(f"Invalid input. Please enter numbers between 0 and {board_size - 1}.")
 
             hit = False
             for ship_row, ship_col in ships:
@@ -77,11 +116,16 @@ def main():
                 else:
                     print("You missed my battleship!")
                     board[guess_row][guess_col] = "X"
+                    give_hint(ships, guess_row, guess_col)
 
             print_board(board)
 
             if not ships:
                 print("You sank all the battleships! You win!")
+                score = calculate_score(turn + 1, max_turns)
+                print(f"Your score: {score}")
+                update_leaderboard(leaderboard, player_name, score)
+                print_leaderboard(leaderboard)
                 break
 
             if turn == max_turns - 1:
