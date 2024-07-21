@@ -929,6 +929,30 @@ def destroy_ship(board, ships):
     print(f"{ship[4]} was destroyed.")
     ships.remove(ship)
 
+def apply_consecutive_hit_bonus(player_stats_dict):
+    if player_stats_dict['consecutive_hits'] >= 3:
+        print("Bonus Applied: Extra turn for 3 consecutive hits!")
+        player_stats_dict['bonus_turns'] += 1
+
+def adjust_ai_difficulty(ai_stats_dict, difficulty):
+    if difficulty == "hard":
+        ai_stats_dict['hit_probability'] += 0.1
+    elif difficulty == "easy":
+        ai_stats_dict['hit_probability'] -= 0.1
+
+def check_achievements(player_stats_dict):
+    achievements = []
+    if player_stats_dict['games_won'] >= 10:
+        achievements.append("Veteran Commander")
+    if player_stats_dict['hit_accuracy'] >= 0.8:
+        achievements.append("Sharp Shooter")
+    if player_stats_dict['games_played'] >= 20:
+        achievements.append("Seasoned Sailor")
+    if achievements:
+        print("Achievements Unlocked:")
+        for achievement in achievements:
+            print(f"- {achievement}")
+
 def main():
     print_instructions()
 
