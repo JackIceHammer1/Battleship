@@ -1,4 +1,5 @@
 import random
+import pickle
 
 def print_board(board):
     for row in board:
@@ -12,11 +13,54 @@ def random_col(board):
 
 def place_ships(board, num_ships):
     ships = []
-    while len(ships) < num_ships:
-        row, col = random_row(board), random_col(board)
-        if (row, col) not in ships:
-            ships.append((row, col))
+    ship_sizes = [2, 3, 3, 4, 5]  # Example ship sizes
+    for size in ship_sizes[:num_ships]:
+        while True:
+            orientation = random.choice(['horizontal', 'vertical'])
+            row, col = random_row(board), random_col(board)
+            if can_place_ship(board, row, col, size, orientation):
+                ships.append((row, col, size, orientation))
+                place_ship_on_board(board, row, col, size, orientation)
+                break
     return ships
+
+def can_place_ship(board, row, col, size, orientation):
+    if orientation == 'horizontal':
+        if col + size > len(board[0]):
+            return False
+        for i in range(size):
+            if board[row][col + i] != "O":
+                return False
+    else:
+        if row + size > len(board):
+            return False
+        for i in range(size):
+            if board[row + i][col] != "O":
+                return False
+    return True
+
+def place_ship_on_board(board, row, col, size, orientation):
+    if orientation == 'horizontal':
+        for i in range(size):
+            board[row][col + i] = "S"
+    else:
+        for i in range(size):
+            board[row + i][col] = "S"
+
+def save_game(state):
+    with open('battleship_save.pkl', 'wb') as f:
+        pickle.dump(state, f)
+    print("Game saved successfully!")
+
+def load_game():
+    try:
+        with open('battleship_save.pkl', 'rb') as f:
+            state = pickle.load(f)
+        print("Game loaded successfully!")
+        return state
+    except FileNotFoundError:
+        print("No saved game found.")
+        return None
 
 def is_valid_input(input_str, board_size):
     return input_str.isdigit() and 0 <= int(input_str) < board_size
@@ -29,6 +73,7 @@ def print_instructions():
     print("Try to sink all the ships hidden on the board.")
     print("You have a limited number of turns to find them all.")
     print("Enter row and column numbers to make your guesses.")
+    print("You can save the game anytime by typing 'save'.")
     print("Good luck!\n")
 
 def select_difficulty():
@@ -60,7 +105,7 @@ def print_leaderboard(leaderboard):
         print(f"{idx + 1}. {name}: {score} points")
 
 def give_hint(ships, guess_row, guess_col):
-    closest_distance = min(get_distance(guess_row, guess_col, ship_row, ship_col) for ship_row, ship_col in ships)
+    closest_distance = min(get_distance(guess_row, guess_col, ship_row, ship_col) for ship_row, ship_col, _, _ in ships)
     if closest_distance == 0:
         print("You hit a ship!")
     else:
@@ -93,7 +138,7 @@ def main():
         print("Player's Board:")
         print_board(player_board)
         
-        # Place the battleships randomly on the boards
+        # Place the battleships on the boards
         player_ships = place_ships(player_board, num_ships)
         ai_ships = place_ships(ai_board, num_ships)
 
@@ -107,6 +152,9 @@ def main():
             while True:
                 guess_row = input(f"Guess Row (0-{board_size - 1}): ")
                 guess_col = input(f"Guess Col (0-{board_size - 1}): ")
+                if guess_row.lower() == 'save' or guess_col.lower() == 'save':
+                    save_game((player_board, ai_board, player_guesses, player_ships, ai_ships, ai_previous_guesses, turn, max_turns, player_name, leaderboard))
+                    continue
                 if is_valid_input(guess_row, board_size) and is_valid_input(guess_col, board_size):
                     guess_row, guess_col = int(guess_row), int(guess_col)
                     break
@@ -114,28 +162,30 @@ def main():
                     print(f"Invalid input. Please enter numbers between 0 and {board_size - 1}.")
 
             player_hit = False
-            for ship_row, ship_col in ai_ships:
-                if guess_row == ship_row and guess_col == ship_col:
-                    print("Congratulations! You sank a battleship!")
-                    player_guesses[guess_row][guess_col] = "S"
-                    ai_ships.remove((ship_row, ship_col))
+            for ship_row, ship_col, size, orientation in ai_ships:
+                if orientation == 'horizontal' and ship_row == guess_row and ship_col <= guess_col < ship_col + size:
+                    print("Congratulations! You hit a battleship!")
+                    player_guesses[guess_row][guess_col] = "H"
                     player_hit = True
                     break
-                elif get_distance(guess_row, guess_col, ship_row, ship_col) == 1:
-                    print("So close! You were just one unit away from a battleship!")
+                elif orientation == 'vertical' and ship_col == guess_col and ship_row <= guess_row < ship_row + size:
+                    print("Congratulations! You hit a battleship!")
+                    player_guesses[guess_row][guess_col] = "H"
+                    player_hit = True
+                    break
 
             if not player_hit:
                 if player_guesses[guess_row][guess_col] == "X":
                     print("You guessed that one already.")
                 else:
-                    print("You missed my battleship!")
+                    print("You missed!")
                     player_guesses[guess_row][guess_col] = "X"
                     give_hint(ai_ships, guess_row, guess_col)
 
             print("Player's Guesses:")
             print_board(player_guesses)
 
-            if not ai_ships:
+            if all([player_guesses[ship_row][ship_col] == 'H' for ship_row, ship_col, _, _ in ai_ships]):
                 print("You sank all the AI's battleships! You win!")
                 score = calculate_score(turn + 1, max_turns)
                 print(f"Your score: {score}")
@@ -148,28 +198,32 @@ def main():
             print(f"\nAI guesses: Row {ai_guess_row}, Col {ai_guess_col}")
 
             ai_hit = False
-            for ship_row, ship_col in player_ships:
-                if ai_guess_row == ship_row and ai_guess_col == ship_col:
-                    print("AI sank one of your battleships!")
-                    player_board[ai_guess_row][ai_guess_col] = "S"
-                    player_ships.remove((ship_row, ship_col))
+            for ship_row, ship_col, size, orientation in player_ships:
+                if orientation == 'horizontal' and ship_row == ai_guess_row and ship_col <= ai_guess_col < ship_col + size:
+                    print("AI hit one of your battleships!")
+                    player_board[ai_guess_row][ai_guess_col] = "H"
+                    ai_hit = True
+                    break
+                elif orientation == 'vertical' and ship_col == ai_guess_col and ship_row <= ai_guess_row < ship_row + size:
+                    print("AI hit one of your battleships!")
+                    player_board[ai_guess_row][ai_guess_col] = "H"
                     ai_hit = True
                     break
 
             if not ai_hit:
-                print("AI missed your battleship!")
+                print("AI missed!")
                 player_board[ai_guess_row][ai_guess_col] = "X"
 
             print("Player's Board:")
             print_board(player_board)
 
-            if not player_ships:
+            if all([player_board[ship_row][ship_col] == 'H' for ship_row, ship_col, _, _ in player_ships]):
                 print("AI sank all your battleships! You lose!")
                 break
 
             if turn == max_turns - 1:
                 print("Game Over. The remaining AI battleships were at:")
-                for ship_row, ship_col in ai_ships:
+                for ship_row, ship_col, size, orientation in ai_ships:
                     print(f"Row: {ship_row}, Col: {ship_col}")
 
         # Ask if the player wants to play again
