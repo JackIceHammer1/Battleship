@@ -809,6 +809,66 @@ def load_game_history(filename):
     except FileNotFoundError:
         return []
 
+def deploy_power_up_choice():
+    print("Power-Ups available:")
+    print("1. Radar - Reveals a 3x3 area")
+    print("2. Shield - Protects a 2x2 area for 3 turns")
+    print("3. Double Shot - Shoot twice in one turn")
+    choice = input("Choose a power-up (1/2/3): ").strip()
+    return choice
+
+def use_power_up(board, power_up_choice, turn_stats):
+    if power_up_choice == '1':
+        reveal_area(board)
+    elif power_up_choice == '2':
+        shield_area(board, turn_stats)
+    elif power_up_choice == '3':
+        double_shot(board)
+        
+def reveal_area(board):
+    row = int(input("Enter starting row for Radar (0-7): "))
+    col = int(input("Enter starting column for Radar (0-7): "))
+    print("Revealed Area:")
+    for r in range(row, row + 3):
+        for c in range(col, col + 3):
+            if r < len(board) and c < len(board[0]):
+                print(board[r][c], end=" ")
+            else:
+                print(" ", end=" ")
+        print()
+
+def shield_area(board, turn_stats):
+    row = int(input("Enter starting row for Shield (0-8): "))
+    col = int(input("Enter starting column for Shield (0-8): "))
+    turn_stats['shield'] = {'row': row, 'col': col, 'turns_remaining': 3}
+    print(f"Shield deployed at ({row}, {col})")
+
+def double_shot(board):
+    print("Double Shot activated!")
+    for _ in range(2):
+        guess_row = int(input(f"Guess Row (0-{len(board) - 1}): "))
+        guess_col = int(input(f"Guess Col (0-{len(board) - 1}): "))
+        if board[guess_row][guess_col] == "S":
+            print("Hit!")
+            board[guess_row][guess_col] = "H"
+        else:
+            print("Miss.")
+            board[guess_row][guess_col] = "X"
+
+def ai_guess_smart(board_size, previous_guesses):
+    import random
+    guess = random.choice([(row, col) for row in range(board_size) for col in range(board_size) if (row, col) not in previous_guesses])
+    return guess
+
+def ai_use_power_up(board, power_up_choice):
+    if power_up_choice == '1':
+        reveal_area(board)
+    elif power_up_choice == '2':
+        shield_area(board, turn_stats)
+    elif power_up_choice == '3':
+        double_shot(board)
+
+
 def main():
     print_instructions()
 
@@ -828,12 +888,7 @@ def main():
             player_board = [["O"] * board_size for _ in range(board_size)]
             ai_board = [["O"] * board_size for _ in range(board_size)]
             
-            if game_mode == 'custom':
-                player_ships = customize_ships()
-                place_custom_ships(player_board, player_ships)
-            else:
-                player_ships = place_ships(player_board, num_ships)
-            
+            player_ships = place_ships(player_board, num_ships)
             ai_ships = place_ships(ai_board, num_ships)
             
             player_stats_dict = {'board': player_board, 'hits': 0, 'misses': 0, 'remaining_ships': num_ships}
@@ -890,10 +945,11 @@ def main():
                 
                 deploy_power_up_choice = input("Do you want to use a power-up? (yes/no): ").strip().lower()
                 if deploy_power_up_choice == 'yes':
-                    use_power_up(player_board, ai_board)
+                    power_up_choice = deploy_power_up_choice()
+                    use_power_up(ai_board, power_up_choice, player_stats_dict)
                 
                 if turn % 2 == 1:
-                    ai_guess_row, ai_guess_col = ai_guess(board_size, previous_ai_guesses)
+                    ai_guess_row, ai_guess_col = ai_guess_smart(board_size, previous_ai_guesses)
                     previous_ai_guesses.add((ai_guess_row, ai_guess_col))
                     if ai_board[ai_guess_row][ai_guess_col] == "S":
                         print(f"AI hit your ship at ({ai_guess_row}, {ai_guess_col})!")
