@@ -431,6 +431,26 @@ def load_game_state(filename):
         print("No saved game found.")
         return None
 
+def provide_hint(ai_board, revealed_positions):
+    hidden_ships = [(r, c) for r in range(len(ai_board)) for c in range(len(ai_board[0])) if ai_board[r][c] == "S" and (r, c) not in revealed_positions]
+    if hidden_ships:
+        hint = random.choice(hidden_ships)
+        print(f"Hint: Try checking row {hint[0]} and column {hint[1]}!")
+    else:
+        print("No more hints available.")
+        
+def ai_use_power_up(player_board, ai_power_up_choice):
+    if ai_power_up_choice == "reveal_ship":
+        unrevealed_ships = [(r, c) for r in range(len(player_board)) for c in range(len(player_board[0])) if player_board[r][c] == "S"]
+        if unrevealed_ships:
+            reveal = random.choice(unrevealed_ships)
+            player_board[reveal[0]][reveal[1]] = "R"
+            print(f"AI power-up: Revealed your ship at ({reveal[0]}, {reveal[1]})!")
+    elif ai_power_up_choice == "extra_turn":
+        print("AI power-up: AI gets an extra turn!")
+        return True
+    return False
+
 def apply_power_up_choice(board, player_ships, ai_ships, power_up_choice):
     if power_up_choice == 'reveal':
         reveal_board(board)
