@@ -363,10 +363,119 @@ def update_ship_status(player_ships, ai_ships, row, col):
         elif orientation == 'vertical' and c == col and r <= row < r + size:
             ai_ships[i] = (r, c, size, orientation, name, remaining_size - 1)
 
+def save_leaderboard(leaderboard, filename):
+    with open(filename, 'w') as file:
+        for player, score in leaderboard:
+            file.write(f"{player}: {score}\n")
+
+def load_leaderboard(filename):
+    leaderboard = []
+    try:
+        with open(filename, 'r') as file:
+            for line in file:
+                player, score = line.strip().split(': ')
+                leaderboard.append((player, int(score)))
+    except FileNotFoundError:
+        print("No saved leaderboard found.")
+    return leaderboard
+
+def display_hint(ai_ships, guess_row, guess_col):
+    nearby_ships = []
+    for row, col, size, orientation, name, remaining_size in ai_ships:
+        if orientation == 'horizontal':
+            if row == guess_row and col <= guess_col < col + size:
+                nearby_ships.append(name)
+        elif orientation == 'vertical':
+            if col == guess_col and row <= guess_row < row + size:
+                nearby_ships.append(name)
+    if nearby_ships:
+        print(f"Hint: You are close to {', '.join(nearby_ships)}.")
+    else:
+        print("Hint: No ships nearby.")
+
+def activate_shield(board, ships):
+    print("Power-up activated: Shield a part of your board!")
+    for _ in range(3):  # Shield 3 random spots
+        row, col = random_row(board), random_col(board)
+        board[row][col] = "P"  # P for Protected
+        print(f"Protected a spot at ({row}, {col})!")
+        for i, (r, c, size, orientation, name, remaining_size) in enumerate(ships):
+            if orientation == 'horizontal' and r == row and c <= col < c + size:
+                ships[i] = (r, c, size, orientation, name, remaining_size)
+            elif orientation == 'vertical' and c == col and r <= row < r + size:
+                ships[i] = (r, c, size, orientation, name, remaining_size)
+
+def power_up_shield(board, player_ships, ai_ships, power_up_choice):
+    if power_up_choice == 'shield':
+        activate_shield(board, player_ships)
+        return False
+    return False
+
+def player_choose_power_up():
+    power_ups = ['reveal', 'extra_turn', 'bomb', 'shield']
+    print("Choose a power-up: ")
+    for i, power_up in enumerate(power_ups, 1):
+        print(f"{i}. {power_up}")
+    choice = int(input("Enter the number of your choice: "))
+    return power_ups[choice - 1]
+
+def save_game_state(filename, state):
+    with open(filename, 'wb') as file:
+        pickle.dump(state, file)
+
+def load_game_state(filename):
+    try:
+        with open(filename, 'rb') as file:
+            return pickle.load(file)
+    except FileNotFoundError:
+        print("No saved game found.")
+        return None
+
+def apply_power_up_choice(board, player_ships, ai_ships, power_up_choice):
+    if power_up_choice == 'reveal':
+        reveal_board(board)
+    elif power_up_choice == 'extra_turn':
+        return True
+    elif power_up_choice == 'bomb':
+        bomb_board(board, player_ships, ai_ships)
+    elif power_up_choice == 'shield':
+        power_up_shield(board, player_ships, ai_ships, power_up_choice)
+    return False
+
+def bomb_board(board, player_ships, ai_ships):
+    print("Power-up activated: Bombing a part of the board!")
+    for _ in range(3):  # Bomb 3 random spots
+        row, col = random_row(board), random_col(board)
+        if board[row][col] == "S":
+            board[row][col] = "H"
+            print(f"Hit a ship at ({row}, {col})!")
+            update_ship_status(player_ships, ai_ships, row, col)
+
+def update_ship_status(player_ships, ai_ships, row, col):
+    for i, (r, c, size, orientation, name, remaining_size) in enumerate(player_ships):
+        if orientation == 'horizontal' and r == row and c <= col < c + size:
+            player_ships[i] = (r, c, size, orientation, name, remaining_size - 1)
+        elif orientation == 'vertical' and c == col and r <= row < r + size:
+            player_ships[i] = (r, c, size, orientation, name, remaining_size - 1)
+    for i, (r, c, size, orientation, name, remaining_size) in enumerate(ai_ships):
+        if orientation == 'horizontal' and r == row and c <= col < c + size:
+            ai_ships[i] = (r, c, size, orientation, name, remaining_size - 1)
+        elif orientation == 'vertical' and c == col and r <= row < r + size:
+            ai_ships[i] = (r, c, size, orientation, name, remaining_size - 1)
+
+def log_move(game_log, player_name, guess_row, guess_col, result):
+    game_log.append({'player': player_name, 'row': guess_row, 'col': guess_col, 'result': result})
+
+def display_log(game_log):
+    print("Game Log:")
+    for move in game_log:
+        print(f"{move['player']} guessed ({move['row']}, {move['col']}) - {move['result']}")
+
+
 def main():
     print_instructions()
 
-    leaderboard = []
+    leaderboard = load_leaderboard("leaderboard.txt")
     player_stats = {'games_played': 0, 'games_won': 0, 'games_lost': 0}
     game_log = []
     scoreboard = load_scoreboard("scoreboard.txt")
@@ -420,6 +529,7 @@ def main():
                     print(f"Your score: {score}")
                     update_leaderboard(leaderboard, player_name, score)
                     display_leaderboard(leaderboard)
+                    save_leaderboard(leaderboard, "leaderboard.txt")
                     update_player_stats(player_stats, True)
                     display_player_stats(player_stats)
                     update_scoreboard(scoreboard, player_name, score)
@@ -432,36 +542,36 @@ def main():
                 ai_board[guess_row][guess_col] = "X"
                 track_statistics(player_stats_dict, False)
                 log_move(game_log, player_name, guess_row, guess_col, "miss")
-                give_hint(ai_ships, guess_row, guess_col)
+                display_hint(ai_ships, guess_row, guess_col)
 
-            power_up_choice = choose_power_up()
+            power_up_choice = player_choose_power_up()
             if apply_power_up_choice(ai_board, player_ships, ai_ships, power_up_choice):
                 continue
 
-            print("AI's turn...")
-            ai_power_up_choice = ai_choose_power_up()
-            if apply_power_up_choice(player_board, ai_ships, player_ships, ai_power_up_choice):
-                ai_guess_row, ai_guess_col = ai_guess(player_board, previous_ai_guesses, board_size)
-                if player_board[ai_guess_row][ai_guess_col] == "S":
-                    print(f"AI hit your ship at ({ai_guess_row}, {ai_guess_col})!")
-                    player_board[ai_guess_row][ai_guess_col] = "H"
-                    for i, (row, col, size, orientation, name, remaining_size) in enumerate(player_ships):
-                        if orientation == 'horizontal' and row == ai_guess_row and col <= ai_guess_col < col + size:
-                            player_ships[i] = (row, col, size, orientation, name, remaining_size - 1)
-                        elif orientation == 'vertical' and col == ai_guess_col and row <= ai_guess_row < row + size:
-                            player_ships[i] = (row, col, size, orientation, name, remaining_size - 1)
-                    if all(remaining_size == 0 for _, _, _, _, _, remaining_size in player_ships):
-                        print("Game over! The AI sank all your ships.")
-                        update_player_stats(player_stats, False)
-                        display_player_stats(player_stats)
-                        break
-                    track_statistics(ai_stats_dict, True)
-                    log_move(game_log, "AI", ai_guess_row, ai_guess_col, "hit")
-                else:
-                    print(f"AI missed at ({ai_guess_row}, {ai_guess_col}).")
-                    player_board[ai_guess_row][ai_guess_col] = "X"
-                    track_statistics(ai_stats_dict, False)
-                    log_move(game_log, "AI", ai_guess_row, ai_guess_col, "miss")
+            print("AI's turn:")
+            ai_guess_row, ai_guess_col = get_ai_guess(board_size, previous_ai_guesses)
+            previous_ai_guesses.add((ai_guess_row, ai_guess_col))
+
+            if player_board[ai_guess_row][ai_guess_col] == "S":
+                print(f"AI hit your ship at ({ai_guess_row}, {ai_guess_col})!")
+                player_board[ai_guess_row][ai_guess_col] = "H"
+                for i, (row, col, size, orientation, name, remaining_size) in enumerate(player_ships):
+                    if orientation == 'horizontal' and row == ai_guess_row and col <= ai_guess_col < col + size:
+                        player_ships[i] = (row, col, size, orientation, name, remaining_size - 1)
+                    elif orientation == 'vertical' and col == ai_guess_col and row <= ai_guess_row < row + size:
+                        player_ships[i] = (row, col, size, orientation, name, remaining_size - 1)
+                if all(remaining_size == 0 for _, _, _, _, _, remaining_size in player_ships):
+                    print("Game over! The AI sank all your ships.")
+                    update_player_stats(player_stats, False)
+                    display_player_stats(player_stats)
+                    break
+                track_statistics(ai_stats_dict, True)
+                log_move(game_log, "AI", ai_guess_row, ai_guess_col, "hit")
+            else:
+                print(f"AI missed at ({ai_guess_row}, {ai_guess_col}).")
+                player_board[ai_guess_row][ai_guess_col] = "X"
+                track_statistics(ai_stats_dict, False)
+                log_move(game_log, "AI", ai_guess_row, ai_guess_col, "miss")
 
         else:
             print("Game over! You've used all your turns.")
