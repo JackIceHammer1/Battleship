@@ -953,58 +953,121 @@ def check_achievements(player_stats_dict):
         for achievement in achievements:
             print(f"- {achievement}")
 
+def update_winning_streak(player_name, win_streak, streak_board):
+    if player_name in streak_board:
+        if win_streak > streak_board[player_name]:
+            streak_board[player_name] = win_streak
+    else:
+        streak_board[player_name] = win_streak
+
+def save_streak_board(streak_board, filename):
+    with open(filename, 'w') as file:
+        for player, streak in streak_board.items():
+            file.write(f"{player},{streak}\n")
+
+def load_streak_board(filename):
+    streak_board = {}
+    try:
+        with open(filename, 'r') as file:
+            for line in file:
+                player, streak = line.strip().split(',')
+                streak_board[player] = int(streak)
+    except FileNotFoundError:
+        pass
+    return streak_board
+
+def display_streak_board(streak_board):
+    print("\nLongest Winning Streaks:")
+    for player, streak in sorted(streak_board.items(), key=lambda item: item[1], reverse=True):
+        print(f"{player}: {streak} wins")
+
+def init_chat():
+    chat_log = []
+    return chat_log
+
+def add_chat_message(chat_log, player_name, message):
+    chat_log.append(f"{player_name}: {message}")
+
+def display_chat(chat_log):
+    print("\nIn-Game Chat:")
+    for message in chat_log:
+        print(message)
+
+def log_game_history(game_history, filename):
+    with open(filename, 'a') as file:
+        for entry in game_history:
+            file.write(entry + "\n")
+
+def add_game_entry(game_history, player_name, action, result):
+    game_history.append(f"{player_name} - {action}: {result}")
+
+def display_game_history(game_history):
+    print("\nGame History:")
+    for entry in game_history:
+        print(entry)
+
+
 def main():
     print_instructions()
 
     leaderboard = load_leaderboard("leaderboard.txt")
-    player_stats = {'games_played': 0, 'games_won': 0, 'games_lost': 0, 'hits': 0, 'misses': 0, 'hit_accuracy': 0}
+    streak_board = load_streak_board("streak_board.txt")
+    player_stats = {'games_played': 0, 'games_won': 0, 'games_lost': 0, 'hits': 0, 'misses': 0, 'hit_accuracy': 0, 'consecutive_hits': 0, 'bonus_turns': 0}
     game_log = []
-    scoreboard = load_scoreboard("scoreboard.txt")
+    game_history = []
+    chat_log = init_chat()
     player_name = input("Enter your name: ")
-    
+    win_streak = 0
+
     while True:
         game_mode = input("Choose game mode (single/multiplayer/custom): ").strip().lower()
-        
+
         if game_mode == 'single':
             difficulty = select_difficulty()
             board_size, num_ships, max_turns = set_parameters(difficulty)
-            
+
             player_board = [["O"] * board_size for _ in range(board_size)]
             ai_board = [["O"] * board_size for _ in range(board_size)]
-            
+
             player_ships = place_ships(player_board, num_ships)
             ai_ships = place_ships(ai_board, num_ships)
-            
-            player_stats_dict = {'board': player_board, 'hits': 0, 'misses': 0, 'remaining_ships': num_ships}
-            ai_stats_dict = {'board': ai_board, 'hits': 0, 'misses': 0, 'remaining_ships': num_ships}
-            
+
+            player_stats_dict = {'board': player_board, 'hits': 0, 'misses': 0, 'remaining_ships': num_ships, 'consecutive_hits': 0, 'bonus_turns': 0}
+            ai_stats_dict = {'board': ai_board, 'hits': 0, 'misses': 0, 'remaining_ships': num_ships, 'hit_probability': 0.5}
+
             previous_ai_guesses = set()
             hits = []
             revealed_positions = set()
             event_stats = {'turns_lost': 0}
-            
+
+            adjust_ai_difficulty(ai_stats_dict, difficulty)
+
             for turn in range(max_turns):
                 if check_forfeit():
                     print("You have forfeited the game.")
                     update_player_stats(player_stats, False)
                     display_game_statistics(player_stats)
+                    add_game_entry(game_history, player_name, "Forfeit", "Loss")
                     break
-                
+
                 print(f"\nTurn {turn + 1}/{max_turns}")
                 print("Player Board:")
                 print_board(player_board)
                 print("AI Board (Fog of War):")
                 fogged_ai_board = apply_fog_of_war(ai_board, revealed_positions)
                 print_board(fogged_ai_board)
-                
+
                 guess_row = int(input(f"Guess Row (0-{board_size - 1}): "))
                 guess_col = int(input(f"Guess Col (0-{board_size - 1}): "))
-                
+
                 if ai_board[guess_row][guess_col] == "S":
                     print("You hit a ship!")
                     ai_board[guess_row][guess_col] = "H"
                     reveal_position(revealed_positions, guess_row, guess_col)
                     hits.append((guess_row, guess_col))
+                    player_stats_dict['consecutive_hits'] += 1
+                    apply_consecutive_hit_bonus(player_stats_dict)
+
                     for i, (row, col, size, orientation, name, remaining_size) in enumerate(ai_ships):
                         if orientation == 'horizontal' and row == guess_row and col <= guess_col < col + size:
                             ai_ships[i] = (row, col, size, orientation, name, remaining_size - 1)
@@ -1022,25 +1085,36 @@ def main():
                         display_game_statistics(player_stats)
                         update_scoreboard(scoreboard, player_name, score)
                         save_scoreboard(scoreboard, "scoreboard.txt")
+                        check_achievements(player_stats_dict)
+                        win_streak += 1
+                        update_winning_streak(player_name, win_streak, streak_board)
+                        save_streak_board(streak_board, "streak_board.txt")
+                        display_streak_board(streak_board)
+                        add_game_entry(game_history, player_name, "Victory", "Win")
+                        log_game_history(game_history, "game_history.txt")
                         break
                     track_statistics(player_stats_dict, True)
                     log_move(game_log, player_name, guess_row, guess_col, "hit")
                 else:
                     print("You missed.")
                     ai_board[guess_row][guess_col] = "X"
+                    player_stats_dict['consecutive_hits'] = 0
                     track_statistics(player_stats_dict, False)
                     log_move(game_log, player_name, guess_row, guess_col, "miss")
-                
-                deploy_power_up_choice = input("Do you want to use a power-up? (yes/no): ").strip().lower()
-                if deploy_power_up_choice == 'yes':
-                    power_up_choice = deploy_power_up_choice()
-                    use_power_up(ai_board, power_up_choice, player_stats_dict)
-                
-                repair_choice = input("Do you want to repair a ship? (yes/no): ").strip().lower()
-                if repair_choice == 'yes':
-                    repair_ship(player_board, player_ships)
-                
-                if turn % 2 == 1:
+
+                if player_stats_dict['bonus_turns'] > 0:
+                    print("You have an extra turn!")
+                    player_stats_dict['bonus_turns'] -= 1
+                else:
+                    deploy_power_up_choice = input("Do you want to use a power-up? (yes/no): ").strip().lower()
+                    if deploy_power_up_choice == 'yes':
+                        power_up_choice = deploy_power_up_choice()
+                        use_power_up(ai_board, power_up_choice, player_stats_dict)
+
+                    repair_choice = input("Do you want to repair a ship? (yes/no): ").strip().lower()
+                    if repair_choice == 'yes':
+                        repair_ship(player_board, player_ships)
+
                     ai_guess_row, ai_guess_col = ai_guess_smart(board_size, previous_ai_guesses)
                     previous_ai_guesses.add((ai_guess_row, ai_guess_col))
                     if ai_board[ai_guess_row][ai_guess_col] == "S":
@@ -1055,6 +1129,9 @@ def main():
                             print("Game over! The AI sank all your ships.")
                             update_player_stats(player_stats, False)
                             display_game_statistics(player_stats)
+                            win_streak = 0
+                            add_game_entry(game_history, player_name, "Defeat", "Loss")
+                            log_game_history(game_history, "game_history.txt")
                             break
                         track_statistics(ai_stats_dict, True)
                         log_move(game_log, "AI", ai_guess_row, ai_guess_col, "hit")
@@ -1063,30 +1140,30 @@ def main():
                         player_board[ai_guess_row][ai_guess_col] = "X"
                         track_statistics(ai_stats_dict, False)
                         log_move(game_log, "AI", ai_guess_row, ai_guess_col, "miss")
-                    
+
                     random_event_choice = input("Do you want to trigger a random event? (yes/no): ").strip().lower()
                     if random_event_choice == 'yes':
                         random_event(player_board, player_ships, event_stats)
-                
+
                 save_choice = input("Do you want to save the game? (yes/no): ").strip().lower()
                 if save_choice == 'yes':
                     save_game("battleship_save.txt", (player_board, ai_board, player_ships, ai_ships, player_stats_dict, ai_stats_dict, previous_ai_guesses, hits, revealed_positions, event_stats, turn, game_log, player_name))
-            
+
             replay_choice = input("Do you want to play again? (yes/no): ").lower()
             if replay_choice == 'no':
                 break
-        
+
         elif game_mode == 'multiplayer':
-            multiplayer_game()
-        
+            chat_log = init_chat()
+            multiplayer_game(chat_log)
+            display_chat(chat_log)
+
         elif game_mode == 'custom':
             print("Customizing game settings...")
             player_board = [["O"] * board_size for _ in range(board_size)]
             ai_board = [["O"] * board_size for _ in range(board_size)]
             player_ships = customize_ships()
             place_custom_ships(player_board, player_ships)
-            ai_ships = place_ships(ai_board, num_ships)
-            # Add game loop for custom mode here
         
         else:
             print("Invalid game mode selected.")
