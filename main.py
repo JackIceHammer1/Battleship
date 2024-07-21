@@ -207,157 +207,174 @@ def update_player_stats(stats, won):
 def display_player_stats(stats):
     print(f"Games Played: {stats['games_played']}, Games Won: {stats['games_won']}, Games Lost: {stats['games_lost']}")
 
+def track_statistics(stats, hit):
+    if hit:
+        stats['hits'] += 1
+    else:
+        stats['misses'] += 1
+    stats['remaining_ships'] = len([row for row in stats['board'] if 'S' in row])
+
+def display_statistics(stats):
+    print(f"Hits: {stats['hits']}, Misses: {stats['misses']}, Remaining Ships: {stats['remaining_ships']}")
+
+def log_move(log, player, row, col, result):
+    log.append(f"{player} guessed row {row}, column {col} - {result}")
+
+def display_log(log):
+    print("\nGame Log:")
+    for entry in log:
+        print(entry)
+
+def use_power_up(board, power_up):
+    if power_up == 'reveal':
+        reveal_board(board)
+    elif power_up == 'extra_turn':
+        return True
+    elif power_up == 'bomb':
+        bomb_board(board)
+    return False
+
+def reveal_board(board):
+    print("Power-up activated: Reveal part of the board!")
+    for row in range(len(board)):
+        for col in range(len(board[0])):
+            if board[row][col] == "S":
+                board[row][col] = "R"  # Reveal ships
+
+def bomb_board(board):
+    print("Power-up activated: Bombing a part of the board!")
+    for _ in range(3):  # Bomb 3 random spots
+        row, col = random_row(board), random_col(board)
+        if board[row][col] == "S":
+            board[row][col] = "H"
+            print(f"Hit a ship at ({row}, {col})!")
+
+def update_player_stats(stats, won):
+    stats['games_played'] += 1
+    if won:
+        stats['games_won'] += 1
+    else:
+        stats['games_lost'] += 1
+
+def display_player_stats(stats):
+    print(f"Games Played: {stats['games_played']}, Games Won: {stats['games_won']}, Games Lost: {stats['games_lost']}")
+
+def check_forfeit():
+    forfeit = input("Do you want to forfeit the game? (yes/no): ").lower()
+    return forfeit == 'yes'
 
 def main():
+    print_instructions()
+
     leaderboard = []
+    player_stats = {'games_played': 0, 'games_won': 0, 'games_lost': 0}
     game_log = []
+    player_name = input("Enter your name: ")
 
     while True:
-        print_instructions()
-        
         difficulty = select_difficulty()
         board_size, num_ships, max_turns = set_parameters(difficulty)
-        
-        # Initialize the game boards
+
         player_board = [["O"] * board_size for _ in range(board_size)]
         ai_board = [["O"] * board_size for _ in range(board_size)]
-        player_guesses = [["O"] * board_size for _ in range(board_size)]
 
-        player_name = input("Enter your name: ")
-
-        print("Player's Board:")
-        print_board(player_board)
-        
-        # Place the battleships on the boards
-        player_ships = player_place_ships(player_board, num_ships)
+        game_mode = choose_game_mode()
+        if game_mode == 'classic':
+            player_ships = place_ships(player_board, num_ships)
+        else:
+            player_ships = player_place_ships(player_board, num_ships)
         ai_ships = place_ships(ai_board, num_ships)
 
-        ai_previous_guesses = set()
+        player_stats_dict = {'board': player_board, 'hits': 0, 'misses': 0, 'remaining_ships': num_ships}
+        ai_stats_dict = {'board': ai_board, 'hits': 0, 'misses': 0, 'remaining_ships': num_ships}
 
-        # Initialize game statistics
-        player_stats = {'hits': 0, 'misses': 0, 'remaining_ships': num_ships, 'board': player_board}
-        ai_stats = {'hits': 0, 'misses': 0, 'remaining_ships': num_ships, 'board': ai_board}
+        previous_ai_guesses = set()
 
-        # Initialize power-ups
-        player_power_ups = ['reveal', 'extra_turn']
-        ai_power_ups = ['reveal', 'extra_turn']
-
-        # Allow the player and AI a certain number of turns to guess
         for turn in range(max_turns):
-            print(f"\nTurn {turn + 1}")
-
-            # Player's turn
-            while True:
-                guess_row = input(f"Guess Row (0-{board_size - 1}): ")
-                guess_col = input(f"Guess Col (0-{board_size - 1}): ")
-                if is_valid_input(guess_row, board_size) and is_valid_input(guess_col, board_size):
-                    guess_row, guess_col = int(guess_row), int(guess_col)
-                    break
-                else:
-                    print(f"Invalid input. Please enter numbers between 0 and {board_size - 1}.")
-            
-            power_up_used = False
-            if player_power_ups:
-                use_power = input("Do you want to use a power-up? (yes/no): ").lower()
-                if use_power == 'yes':
-                    power_up = input(f"Choose a power-up {player_power_ups}: ").lower()
-                    if power_up in player_power_ups:
-                        power_up_used = use_power_up(player_guesses, power_up)
-                        player_power_ups.remove(power_up)
-
-            player_hit = False
-            for ship_row, ship_col, size, orientation, name, remaining in ai_ships:
-                if orientation == 'horizontal' and ship_row == guess_row and ship_col <= guess_col < ship_col + size:
-                    print(f"Congratulations! You hit the {name}!")
-                    player_guesses[guess_row][guess_col] = "H"
-                    ai_board[guess_row][guess_col] = "H"
-                    player_hit = True
-                    remaining -= 1
-                    if remaining == 0:
-                        print(f"You sank the {name}!")
-                    break
-                elif orientation == 'vertical' and ship_col == guess_col and ship_row <= guess_row < ship_row + size:
-                    print(f"Congratulations! You hit the {name}!")
-                    player_guesses[guess_row][guess_col] = "H"
-                    ai_board[guess_row][guess_col] = "H"
-                    player_hit = True
-                    remaining -= 1
-                    if remaining == 0:
-                        print(f"You sank the {name}!")
-                    break
-
-            if not player_hit:
-                if player_guesses[guess_row][guess_col] in ["X", "H"]:
-                    print("You guessed that one already.")
-                else:
-                    print("You missed my battleship!")
-                    player_guesses[guess_row][guess_col] = "X"
-                    ai_board[guess_row][guess_col] = "X"
-                    give_hint(ai_ships, guess_row, guess_col)
-
-            print("Player's Guesses:")
-            print_board(player_guesses)
-            track_statistics(player_stats, player_hit)
-            display_statistics(player_stats)
-            log_move(game_log, player_name, guess_row, guess_col, "Hit" if player_hit else "Miss")
-
-            if all([ai_board[ship_row][ship_col] == 'H' for ship_row, ship_col, _, _, _, _ in ai_ships]):
-                print("You sank all the AI's battleships! You win!")
-                score = calculate_score(turn + 1, max_turns)
-                print(f"Your score: {score}")
-                update_leaderboard(leaderboard, player_name, score)
-                print_leaderboard(leaderboard)
+            if check_forfeit():
+                print("You have forfeited the game.")
+                update_player_stats(player_stats, False)
+                display_player_stats(player_stats)
                 break
 
-            # AI's turn
-            ai_guess_row, ai_guess_col = ai_guess(player_board, ai_previous_guesses, board_size)
-            print(f"\nAI guesses: Row {ai_guess_row}, Col {ai_guess_col}")
-
-            ai_hit = False
-            for ship_row, ship_col, size, orientation, name, remaining in player_ships:
-                if orientation == 'horizontal' and ship_row == ai_guess_row and ship_col <= ai_guess_col < ship_col + size:
-                    print(f"AI hit your {name}!")
-                    player_board[ai_guess_row][ai_guess_col] = "H"
-                    ai_hit = True
-                    remaining -= 1
-                    if remaining == 0:
-                        print(f"AI sank your {name}!")
-                    break
-                elif orientation == 'vertical' and ship_col == ai_guess_col and ship_row <= ai_guess_row < ship_row + size:
-                    print(f"AI hit your {name}!")
-                    player_board[ai_guess_row][ai_guess_col] = "H"
-                    ai_hit = True
-                    remaining -= 1
-                    if remaining == 0:
-                        print(f"AI sank your {name}!")
-                    break
-
-            if not ai_hit:
-                print("AI missed your battleship!")
-                player_board[ai_guess_row][ai_guess_col] = "X"
-
-            print("Player's Board:")
+            print(f"\nTurn {turn + 1}/{max_turns}")
+            print("Player Board:")
             print_board(player_board)
-            track_statistics(ai_stats, ai_hit)
-            display_statistics(ai_stats)
-            log_move(game_log, "AI", ai_guess_row, ai_guess_col, "Hit" if ai_hit else "Miss")
+            print("AI Board:")
+            print_board(ai_board)
 
-            if all([player_board[ship_row][ship_col] == 'H' for ship_row, ship_col, _, _, _, _ in player_ships]):
-                print("AI sank all your battleships! You lose!")
-                break
+            guess_row = int(input(f"Guess Row (0-{board_size - 1}): "))
+            guess_col = int(input(f"Guess Col (0-{board_size - 1}): "))
+            if ai_board[guess_row][guess_col] == "S":
+                print("You hit a ship!")
+                ai_board[guess_row][guess_col] = "H"
+                for i, (row, col, size, orientation, name, remaining_size) in enumerate(ai_ships):
+                    if orientation == 'horizontal' and row == guess_row and col <= guess_col < col + size:
+                        ai_ships[i] = (row, col, size, orientation, name, remaining_size - 1)
+                    elif orientation == 'vertical' and col == guess_col and row <= guess_row < row + size:
+                        ai_ships[i] = (row, col, size, orientation, name, remaining_size - 1)
+                if all(remaining_size == 0 for _, _, _, _, _, remaining_size in ai_ships):
+                    print("Congratulations! You sank all the AI's ships!")
+                    score = calculate_score(turn + 1, max_turns)
+                    print(f"Your score: {score}")
+                    update_leaderboard(leaderboard, player_name, score)
+                    display_leaderboard(leaderboard)
+                    update_player_stats(player_stats, True)
+                    display_player_stats(player_stats)
+                    break
+                track_statistics(player_stats_dict, True)
+                log_move(game_log, player_name, guess_row, guess_col, "hit")
+            else:
+                print("You missed.")
+                ai_board[guess_row][guess_col] = "X"
+                track_statistics(player_stats_dict, False)
+                log_move(game_log, player_name, guess_row, guess_col, "miss")
+                give_hint(ai_ships, guess_row, guess_col)
 
-            if turn == max_turns - 1:
-                print("Game Over. The remaining AI battleships were at:")
-                for ship_row, ship_col, size, orientation, name, _ in ai_ships:
-                    print(f"Row: {ship_row}, Col: {ship_col}")
+            print("AI's turn...")
+            ai_guess_row, ai_guess_col = ai_guess(player_board, previous_ai_guesses, board_size)
+            if player_board[ai_guess_row][ai_guess_col] == "S":
+                print(f"AI hit your ship at ({ai_guess_row}, {ai_guess_col})!")
+                player_board[ai_guess_row][ai_guess_col] = "H"
+                for i, (row, col, size, orientation, name, remaining_size) in enumerate(player_ships):
+                    if orientation == 'horizontal' and row == ai_guess_row and col <= ai_guess_col < col + size:
+                        player_ships[i] = (row, col, size, orientation, name, remaining_size - 1)
+                    elif orientation == 'vertical' and col == ai_guess_col and row <= ai_guess_row < row + size:
+                        player_ships[i] = (row, col, size, orientation, name, remaining_size - 1)
+                if all(remaining_size == 0 for _, _, _, _, _, remaining_size in player_ships):
+                    print("Game over! The AI sank all your ships.")
+                    update_player_stats(player_stats, False)
+                    display_player_stats(player_stats)
+                    break
+                track_statistics(ai_stats_dict, True)
+                log_move(game_log, "AI", ai_guess_row, ai_guess_col, "hit")
+            else:
+                print(f"AI missed at ({ai_guess_row}, {ai_guess_col}).")
+                player_board[ai_guess_row][ai_guess_col] = "X"
+                track_statistics(ai_stats_dict, False)
+                log_move(game_log, "AI", ai_guess_row, ai_guess_col, "miss")
 
-        # Display game log
+        else:
+            print("Game over! You've used all your turns.")
+            update_player_stats(player_stats, False)
+            display_player_stats(player_stats)
+
+        display_statistics(player_stats_dict)
         display_log(game_log)
 
-        # Ask if the player wants to play again
-        play_again = input("\nDo you want to play again? (yes/no): ").lower()
-        if play_again != "yes":
-            print("Thanks for playing!")
+        save_choice = input("Do you want to save the game? (yes/no): ").lower()
+        if save_choice == 'yes':
+            save_game((player_board, ai_board, player_ships, ai_ships, turn, leaderboard, player_stats_dict, ai_stats_dict, previous_ai_guesses, game_log, player_name, player_stats))
+
+        load_choice = input("Do you want to load a saved game? (yes/no): ").lower()
+        if load_choice == 'yes':
+            state = load_game()
+            if state:
+                (player_board, ai_board, player_ships, ai_ships, turn, leaderboard, player_stats_dict, ai_stats_dict, previous_ai_guesses, game_log, player_name, player_stats) = state
+                continue
+
+        replay_choice = input("Do you want to play again? (yes/no): ").lower()
+        if replay_choice == 'no':
             break
 
 if __name__ == "__main__":
