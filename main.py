@@ -868,6 +868,66 @@ def ai_use_power_up(board, power_up_choice):
     elif power_up_choice == '3':
         double_shot(board)
 
+def apply_fog_of_war(board, revealed_positions):
+    fogged_board = [["?" if (row, col) not in revealed_positions else board[row][col] for col in range(len(board[0]))] for row in range(len(board))]
+    return fogged_board
+
+def reveal_position(revealed_positions, row, col):
+    revealed_positions.add((row, col))
+
+def repair_ship(board, ships):
+    ship_to_repair = input("Enter the name of the ship you want to repair: ").strip().lower()
+    for i, (row, col, size, orientation, name, remaining_size) in enumerate(ships):
+        if name.lower() == ship_to_repair and remaining_size < size:
+            if orientation == 'horizontal':
+                for c in range(col, col + size):
+                    if board[row][c] == 'H':
+                        board[row][c] = 'S'
+                        ships[i] = (row, col, size, orientation, name, remaining_size + 1)
+                        print(f"{name} repaired at ({row}, {c}).")
+                        return
+            elif orientation == 'vertical':
+                for r in range(row, row + size):
+                    if board[r][col] == 'H':
+                        board[r][col] = 'S'
+                        ships[i] = (row, col, size, orientation, name, remaining_size + 1)
+                        print(f"{name} repaired at ({r}, {col}).")
+                        return
+    print("Repair failed. Either the ship is not damaged or the name is incorrect.")
+
+import random
+
+def random_event(board, ships, event_stats):
+    event = random.choice(['storm', 'mutiny', 'sea_monster'])
+    if event == 'storm':
+        print("A storm has damaged one of your ships!")
+        damage_ship(board, ships)
+    elif event == 'mutiny':
+        print("A mutiny has occurred! One turn lost.")
+        event_stats['turns_lost'] += 1
+    elif event == 'sea_monster':
+        print("A sea monster has attacked! One ship lost.")
+        destroy_ship(board, ships)
+        
+def damage_ship(board, ships):
+    ship = random.choice(ships)
+    if ship[3] == 'horizontal':
+        col = random.randint(ship[1], ship[1] + ship[2] - 1)
+        board[ship[0]][col] = 'H'
+    else:
+        row = random.randint(ship[0], ship[0] + ship[2] - 1)
+        board[row][ship[1]] = 'H'
+    print(f"{ship[4]} was damaged.")
+    
+def destroy_ship(board, ships):
+    ship = random.choice(ships)
+    for i in range(ship[2]):
+        if ship[3] == 'horizontal':
+            board[ship[0]][ship[1] + i] = 'H'
+        else:
+            board[ship[0] + i][ship[1]] = 'H'
+    print(f"{ship[4]} was destroyed.")
+    ships.remove(ship)
 
 def main():
     print_instructions()
@@ -896,6 +956,8 @@ def main():
             
             previous_ai_guesses = set()
             hits = []
+            revealed_positions = set()
+            event_stats = {'turns_lost': 0}
             
             for turn in range(max_turns):
                 if check_forfeit():
@@ -907,8 +969,9 @@ def main():
                 print(f"\nTurn {turn + 1}/{max_turns}")
                 print("Player Board:")
                 print_board(player_board)
-                print("AI Board:")
-                print_board(ai_board)
+                print("AI Board (Fog of War):")
+                fogged_ai_board = apply_fog_of_war(ai_board, revealed_positions)
+                print_board(fogged_ai_board)
                 
                 guess_row = int(input(f"Guess Row (0-{board_size - 1}): "))
                 guess_col = int(input(f"Guess Col (0-{board_size - 1}): "))
@@ -916,6 +979,7 @@ def main():
                 if ai_board[guess_row][guess_col] == "S":
                     print("You hit a ship!")
                     ai_board[guess_row][guess_col] = "H"
+                    reveal_position(revealed_positions, guess_row, guess_col)
                     hits.append((guess_row, guess_col))
                     for i, (row, col, size, orientation, name, remaining_size) in enumerate(ai_ships):
                         if orientation == 'horizontal' and row == guess_row and col <= guess_col < col + size:
@@ -948,6 +1012,10 @@ def main():
                     power_up_choice = deploy_power_up_choice()
                     use_power_up(ai_board, power_up_choice, player_stats_dict)
                 
+                repair_choice = input("Do you want to repair a ship? (yes/no): ").strip().lower()
+                if repair_choice == 'yes':
+                    repair_ship(player_board, player_ships)
+                
                 if turn % 2 == 1:
                     ai_guess_row, ai_guess_col = ai_guess_smart(board_size, previous_ai_guesses)
                     previous_ai_guesses.add((ai_guess_row, ai_guess_col))
@@ -971,29 +1039,22 @@ def main():
                         player_board[ai_guess_row][ai_guess_col] = "X"
                         track_statistics(ai_stats_dict, False)
                         log_move(game_log, "AI", ai_guess_row, ai_guess_col, "miss")
+                    
+                    random_event_choice = input("Do you want to trigger a random event? (yes/no): ").strip().lower()
+                    if random_event_choice == 'yes':
+                        random_event(player_board, player_ships, event_stats)
                 
-                display_game_statistics(player_stats)
-                display_log(game_log)
-                display_scoreboard(scoreboard)
-                
-                save_choice = input("Do you want to save the game? (yes/no): ").lower()
+                save_choice = input("Do you want to save the game? (yes/no): ").strip().lower()
                 if save_choice == 'yes':
-                    save_game_state("savegame.txt", [player_board, ai_board, player_ships, ai_ships, turn, leaderboard, player_stats, game_log, player_name])
-                
-                load_choice = input("Do you want to load a saved game? (yes/no): ").lower()
-                if load_choice == 'yes':
-                    state = load_game_state("savegame.txt")
-                    if state:
-                        (player_board, ai_board, player_ships, ai_ships, turn, leaderboard, player_stats, game_log, player_name) = state
-                        continue
-                
-                replay_choice = input("Do you want to play again? (yes/no): ").lower()
-                if replay_choice == 'no':
-                    break
-
+                    save_game("battleship_save.txt", (player_board, ai_board, player_ships, ai_ships, player_stats_dict, ai_stats_dict, previous_ai_guesses, hits, revealed_positions, event_stats, turn, game_log, player_name))
+            
+            replay_choice = input("Do you want to play again? (yes/no): ").lower()
+            if replay_choice == 'no':
+                break
+        
         elif game_mode == 'multiplayer':
             multiplayer_game()
-
+        
         elif game_mode == 'custom':
             print("Customizing game settings...")
             player_board = [["O"] * board_size for _ in range(board_size)]
@@ -1002,7 +1063,7 @@ def main():
             place_custom_ships(player_board, player_ships)
             ai_ships = place_ships(ai_board, num_ships)
             # Add game loop for custom mode here
-
+        
         else:
             print("Invalid game mode selected.")
 
