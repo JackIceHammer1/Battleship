@@ -593,6 +593,110 @@ def load_game():
         print("Game loaded.")
     return state
 
+def advanced_ai_guess(board_size, previous_guesses, hits):
+    # Use a simple strategy to prioritize previously hit locations
+    if hits:
+        last_hit = hits[-1]
+        # Check adjacent cells
+        adjacent_cells = [
+            (last_hit[0] - 1, last_hit[1]), 
+            (last_hit[0] + 1, last_hit[1]), 
+            (last_hit[0], last_hit[1] - 1), 
+            (last_hit[0], last_hit[1] + 1)
+        ]
+        # Filter out cells that are out of bounds or already guessed
+        adjacent_cells = [(r, c) for r, c in adjacent_cells if 0 <= r < board_size and 0 <= c < board_size and (r, c) not in previous_guesses]
+        if adjacent_cells:
+            return random.choice(adjacent_cells)
+    # If no adjacent cells or no hits yet, fall back to random guessing
+    return get_ai_guess(board_size, previous_guesses)
+
+def update_ships_board(board, ships):
+    for ship in ships:
+        row, col, size, orientation, _, _ = ship
+        if orientation == 'horizontal':
+            for c in range(col, col + size):
+                board[row][c] = "S"
+        else:
+            for r in range(row, row + size):
+                board[r][col] = "S"
+
+def display_ship_info(ships):
+    print("Ship Information:")
+    for ship in ships:
+        row, col, size, orientation, name, remaining_size = ship
+        orientation_str = "Horizontal" if orientation == 'horizontal' else "Vertical"
+        print(f"{name}: Start({row}, {col}), Size: {size}, Orientation: {orientation_str}, Remaining: {remaining_size}")
+
+def deploy_power_up(board, power_up_type, row, col):
+    if power_up_type == 'radar':
+        # Show all ship locations for one turn
+        print("Radar Power-Up Activated!")
+        reveal_board(board)
+    elif power_up_type == 'airstrike':
+        # Randomly sink a ship on the board
+        print("Airstrike Power-Up Activated!")
+        for r in range(len(board)):
+            for c in range(len(board)):
+                if board[r][c] == "S":
+                    board[r][c] = "X"  # Sink the ship
+                    return
+    elif power_up_type == 'missile':
+        # Remove a ship from the opponent's board
+        print("Missile Power-Up Activated!")
+        row = random_row(len(board))
+        col = random_col(len(board))
+        if board[row][col] == "S":
+            board[row][col] = "X"
+
+def check_achievements(player_stats):
+    achievements = []
+    if player_stats['games_won'] >= 10:
+        achievements.append("Victory Veteran: 10 wins")
+    if player_stats['hit_accuracy'] >= 80:
+        achievements.append("Sharp Shooter: 80% accuracy")
+    return achievements
+
+def award_rewards(achievements):
+    for achievement in achievements:
+        print(f"Congratulations! You've earned the achievement: {achievement}")
+
+def update_player_stats(player_stats, won_game):
+    player_stats['games_played'] += 1
+    if won_game:
+        player_stats['games_won'] += 1
+    else:
+        player_stats['games_lost'] += 1
+    player_stats['hit_accuracy'] = (player_stats['hits'] / (player_stats['hits'] + player_stats['misses'])) * 100 if (player_stats['hits'] + player_stats['misses']) > 0 else 0
+
+def save_game_state(filename, state):
+    with open(filename, 'w') as file:
+        for item in state:
+            file.write(f"{item}\n")
+
+def load_game_state(filename):
+    try:
+        with open(filename, 'r') as file:
+            state = [line.strip() for line in file]
+            return state
+    except FileNotFoundError:
+        print("No saved game found.")
+        return None
+
+def display_game_statistics(player_stats):
+    print(f"Games Played: {player_stats['games_played']}")
+    print(f"Games Won: {player_stats['games_won']}")
+    print(f"Games Lost: {player_stats['games_lost']}")
+    print(f"Hit Accuracy: {player_stats['hit_accuracy']:.2f}%")
+
+def log_move(game_log, player_name, row, col, result):
+    game_log.append(f"{player_name} guessed ({row}, {col}): {result}")
+
+def display_log(game_log):
+    print("Game Log:")
+    for entry in game_log:
+        print(entry)
+
 def get_ai_guess(board_size, previous_guesses):
     row, col = random_row(board_size), random_col(board_size)
     while (row, col) in previous_guesses:
@@ -603,7 +707,7 @@ def main():
     print_instructions()
 
     leaderboard = load_leaderboard("leaderboard.txt")
-    player_stats = {'games_played': 0, 'games_won': 0, 'games_lost': 0}
+    player_stats = {'games_played': 0, 'games_won': 0, 'games_lost': 0, 'hits': 0, 'misses': 0, 'hit_accuracy': 0}
     game_log = []
     scoreboard = load_scoreboard("scoreboard.txt")
     player_name = input("Enter your name: ")
@@ -626,12 +730,13 @@ def main():
         ai_stats_dict = {'board': ai_board, 'hits': 0, 'misses': 0, 'remaining_ships': num_ships}
 
         previous_ai_guesses = set()
+        hits = []
 
         for turn in range(max_turns):
             if check_forfeit():
                 print("You have forfeited the game.")
                 update_player_stats(player_stats, False)
-                display_player_stats(player_stats)
+                display_game_statistics(player_stats)
                 break
 
             print(f"\nTurn {turn + 1}/{max_turns}")
@@ -645,6 +750,7 @@ def main():
             if ai_board[guess_row][guess_col] == "S":
                 print("You hit a ship!")
                 ai_board[guess_row][guess_col] = "H"
+                hits.append((guess_row, guess_col))
                 for i, (row, col, size, orientation, name, remaining_size) in enumerate(ai_ships):
                     if orientation == 'horizontal' and row == guess_row and col <= guess_col < col + size:
                         ai_ships[i] = (row, col, size, orientation, name, remaining_size - 1)
@@ -658,7 +764,7 @@ def main():
                     display_leaderboard(leaderboard)
                     save_leaderboard(leaderboard, "leaderboard.txt")
                     update_player_stats(player_stats, True)
-                    display_player_stats(player_stats)
+                    display_game_statistics(player_stats)
                     update_scoreboard(scoreboard, player_name, score)
                     save_scoreboard(scoreboard, "scoreboard.txt")
                     break
@@ -669,14 +775,14 @@ def main():
                 ai_board[guess_row][guess_col] = "X"
                 track_statistics(player_stats_dict, False)
                 log_move(game_log, player_name, guess_row, guess_col, "miss")
-                display_hint(ai_ships, guess_row, guess_col)
 
-            power_up_choice = player_choose_power_up()
-            if apply_power_up_choice(ai_board, player_ships, ai_ships, power_up_choice):
-                continue
+            deploy_power_up_choice = input("Do you want to use a power-up? (yes/no): ").strip().lower()
+            if deploy_power_up_choice == 'yes':
+                power_up_choice = player_choose_power_up()
+                deploy_power_up(player_board, power_up_choice, guess_row, guess_col)
 
             print("AI's turn:")
-            ai_guess_row, ai_guess_col = get_ai_guess(board_size, previous_ai_guesses)
+            ai_guess_row, ai_guess_col = advanced_ai_guess(board_size, previous_ai_guesses, hits)
             previous_ai_guesses.add((ai_guess_row, ai_guess_col))
 
             if player_board[ai_guess_row][ai_guess_col] == "S":
@@ -690,7 +796,7 @@ def main():
                 if all(remaining_size == 0 for _, _, _, _, _, remaining_size in player_ships):
                     print("Game over! The AI sank all your ships.")
                     update_player_stats(player_stats, False)
-                    display_player_stats(player_stats)
+                    display_game_statistics(player_stats)
                     break
                 track_statistics(ai_stats_dict, True)
                 log_move(game_log, "AI", ai_guess_row, ai_guess_col, "hit")
@@ -700,24 +806,19 @@ def main():
                 track_statistics(ai_stats_dict, False)
                 log_move(game_log, "AI", ai_guess_row, ai_guess_col, "miss")
 
-        else:
-            print("Game over! You've used all your turns.")
-            update_player_stats(player_stats, False)
-            display_player_stats(player_stats)
-
-        display_statistics(player_stats_dict)
+        display_game_statistics(player_stats)
         display_log(game_log)
         display_scoreboard(scoreboard)
 
         save_choice = input("Do you want to save the game? (yes/no): ").lower()
         if save_choice == 'yes':
-            save_game((player_board, ai_board, player_ships, ai_ships, turn, leaderboard, player_stats_dict, ai_stats_dict, previous_ai_guesses, game_log, player_name, player_stats))
+            save_game_state("savegame.txt", [player_board, ai_board, player_ships, ai_ships, turn, leaderboard, player_stats, game_log, player_name])
 
         load_choice = input("Do you want to load a saved game? (yes/no): ").lower()
         if load_choice == 'yes':
-            state = load_game()
+            state = load_game_state("savegame.txt")
             if state:
-                (player_board, ai_board, player_ships, ai_ships, turn, leaderboard, player_stats_dict, ai_stats_dict, previous_ai_guesses, game_log, player_name, player_stats) = state
+                (player_board, ai_board, player_ships, ai_ships, turn, leaderboard, player_stats, game_log, player_name) = state
                 continue
 
         replay_choice = input("Do you want to play again? (yes/no): ").lower()
@@ -726,3 +827,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
