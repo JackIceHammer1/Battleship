@@ -181,6 +181,33 @@ def reveal_board(board):
             if board[row][col] == "S":
                 board[row][col] = "R"  # Reveal ships
 
+def choose_board_size():
+    while True:
+        size = input("Enter board size (minimum 5): ")
+        if size.isdigit() and int(size) >= 5:
+            return int(size)
+        else:
+            print("Invalid size. Please enter a number 5 or greater.")
+
+def choose_game_mode():
+    while True:
+        mode = input("Select game mode (quick, classic): ").lower()
+        if mode in ['quick', 'classic']:
+            return mode
+        else:
+            print("Invalid game mode. Please enter 'quick' or 'classic'.")
+
+def update_player_stats(stats, won):
+    stats['games_played'] += 1
+    if won:
+        stats['games_won'] += 1
+    else:
+        stats['games_lost'] += 1
+
+def display_player_stats(stats):
+    print(f"Games Played: {stats['games_played']}, Games Won: {stats['games_won']}, Games Lost: {stats['games_lost']}")
+
+
 def main():
     leaderboard = []
     game_log = []
