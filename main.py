@@ -471,6 +471,133 @@ def display_log(game_log):
     for move in game_log:
         print(f"{move['player']} guessed ({move['row']}, {move['col']}) - {move['result']}")
 
+def print_instructions():
+    print("Welcome to Battleship!")
+    print("Instructions:")
+    print("1. Place your ships on the board.")
+    print("2. Take turns guessing the locations of the opponent's ships.")
+    print("3. Use power-ups to gain advantages.")
+    print("4. The game ends when all ships of one player are sunk.")
+    print("5. Try to sink all opponent's ships before they sink yours.")
+
+def save_scoreboard(scoreboard, filename):
+    with open(filename, 'w') as file:
+        for player, score in scoreboard:
+            file.write(f"{player}: {score}\n")
+
+def load_scoreboard(filename):
+    scoreboard = []
+    try:
+        with open(filename, 'r') as file:
+            for line in file:
+                player, score = line.strip().split(': ')
+                scoreboard.append((player, int(score)))
+    except FileNotFoundError:
+        print("No saved scoreboard found.")
+    return scoreboard
+
+def display_scoreboard(scoreboard):
+    print("Scoreboard:")
+    for player, score in scoreboard:
+        print(f"{player}: {score}")
+
+def random_row(board):
+    return random.randint(0, len(board) - 1)
+
+def random_col(board):
+    return random.randint(0, len(board) - 1)
+
+def reveal_board(board):
+    print("Revealing the board:")
+    for row in board:
+        print(" ".join(row))
+
+def player_place_ships(board, num_ships):
+    ships = []
+    for _ in range(num_ships):
+        while True:
+            try:
+                row = int(input("Enter the starting row for your ship (0-4): "))
+                col = int(input("Enter the starting column for your ship (0-4): "))
+                size = int(input("Enter the size of your ship (1-3): "))
+                orientation = input("Enter orientation (horizontal/vertical): ").strip().lower()
+                if orientation not in ['horizontal', 'vertical']:
+                    raise ValueError("Invalid orientation.")
+                if orientation == 'horizontal' and col + size > len(board):
+                    raise ValueError("Ship extends beyond board.")
+                if orientation == 'vertical' and row + size > len(board):
+                    raise ValueError("Ship extends beyond board.")
+                if orientation == 'horizontal':
+                    for c in range(col, col + size):
+                        if board[row][c] == "S":
+                            raise ValueError("Ship overlaps with another ship.")
+                if orientation == 'vertical':
+                    for r in range(row, row + size):
+                        if board[r][col] == "S":
+                            raise ValueError("Ship overlaps with another ship.")
+                break
+            except ValueError as e:
+                print(e)
+        if orientation == 'horizontal':
+            for c in range(col, col + size):
+                board[row][c] = "S"
+        else:
+            for r in range(row, row + size):
+                board[r][col] = "S"
+        ships.append((row, col, size, orientation, f"Ship{_+1}", size))
+    return ships
+
+def track_statistics(stats_dict, hit):
+    if hit:
+        stats_dict['hits'] += 1
+    else:
+        stats_dict['misses'] += 1
+
+def display_statistics(stats_dict):
+    print(f"Hits: {stats_dict['hits']}")
+    print(f"Misses: {stats_dict['misses']}")
+    print(f"Remaining Ships: {stats_dict['remaining_ships']}")
+
+def calculate_score(turns, max_turns):
+    return max(100 - (turns - 1) * 10, 0)
+
+def update_leaderboard(leaderboard, player_name, score):
+    found = False
+    for i, (player, old_score) in enumerate(leaderboard):
+        if player == player_name:
+            leaderboard[i] = (player_name, max(score, old_score))
+            found = True
+            break
+    if not found:
+        leaderboard.append((player_name, score))
+
+def update_scoreboard(scoreboard, player_name, score):
+    found = False
+    for i, (player, old_score) in enumerate(scoreboard):
+        if player == player_name:
+            scoreboard[i] = (player_name, max(score, old_score))
+            found = True
+            break
+    if not found:
+        scoreboard.append((player_name, score))
+
+def save_game(state):
+    filename = input("Enter filename to save the game: ")
+    save_game_state(filename, state)
+    print("Game saved.")
+
+def load_game():
+    filename = input("Enter filename to load the game: ")
+    state = load_game_state(filename)
+    if state:
+        print("Game loaded.")
+    return state
+
+def get_ai_guess(board_size, previous_guesses):
+    row, col = random_row(board_size), random_col(board_size)
+    while (row, col) in previous_guesses:
+        row, col = random_row(board_size), random_col(board_size)
+    return row, col
 
 def main():
     print_instructions()
